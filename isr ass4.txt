@@ -1,0 +1,139 @@
+
+# Install required libraries
+!pip install opencv-python numpy matplotlib Pillow ImageHash scikit-learn
+
+# Import libraries
+import os
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+import imagehash
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Dataset folder
+DATASET_PATH = "dataset"
+
+# Read image files
+images = []
+
+for file in os.listdir(DATASET_PATH):
+    if file.endswith((".jpg", ".jpeg", ".png")):
+        images.append(file)
+
+print("Images found:", len(images))
+print(images)
+
+# Display images
+for file in images:
+    img = cv2.imread(os.path.join(DATASET_PATH, file))
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    plt.imshow(img)
+    plt.title(file)
+    plt.axis("off")
+    plt.show()
+
+# Extract color features
+def color_feature(path):
+    img = cv2.imread(path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    features = []
+
+    for i in range(3):
+        hist = cv2.calcHist([img], [i], None, [32], [0, 256])
+        hist = cv2.normalize(hist, hist).flatten()
+        features.extend(hist)
+
+    return np.array(features)
+
+# Plot color histogram
+path = os.path.join(DATASET_PATH, images[0])
+img = cv2.imread(path)
+img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+plt.hist(img.ravel(), bins=32)
+plt.title("Color Histogram")
+plt.xlabel("Pixel Value")
+plt.ylabel("Frequency")
+plt.show()
+
+# Extract features from all images
+features = []
+
+for file in images:
+    path = os.path.join(DATASET_PATH, file)
+    features.append(color_feature(path))
+
+features = np.array(features)
+
+print("Feature shape:", features.shape)
+
+# Search similar images
+def search_image(query_file, top_k=5):
+    path = os.path.join(DATASET_PATH, query_file)
+
+    query_feature = color_feature(path).reshape(1, -1)
+
+    scores = cosine_similarity(query_feature, features)[0]
+
+    indexes = np.argsort(scores)[::-1]
+
+    return indexes[:top_k], scores
+
+# Display search results
+query = images[0]
+
+indexes, scores = search_image(query)
+
+print("Query image:", query)
+print("\nSimilar images:")
+
+for i in indexes:
+    print(images[i], "Similarity:", round(scores[i], 3))
+
+# Display similar images
+for i in indexes:
+    path = os.path.join(DATASET_PATH, images[i])
+    img = cv2.imread(path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    plt.imshow(img)
+    plt.title(images[i] + " " + str(round(scores[i], 2)))
+    plt.axis("off")
+    plt.show()
+
+# Image hashing using pHash
+def get_hash(path):
+    img = Image.open(path)
+    return imagehash.phash(img)
+
+# Generate hashes
+hashes = {}
+
+for file in images:
+    path = os.path.join(DATASET_PATH, file)
+    hashes[file] = get_hash(path)
+
+print("\nImage Hashes:")
+print(hashes)
+
+# Find similar images using hash
+query = images[0]
+query_path = os.path.join(DATASET_PATH, query)
+
+query_hash = get_hash(query_path)
+
+results = []
+
+for file in images:
+    distance = query_hash - hashes[file]
+    results.append((file, distance))
+
+results.sort(key=lambda x: x[1])
+
+print("\nQuery:", query)
+print("\nHash Results:")
+
+for file, distance in results:
+    print(file, "Distance:", distance)
